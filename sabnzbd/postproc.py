@@ -28,7 +28,7 @@ import urllib
 import time
 import re
 
-from sabnzbd.newsunpack import unpack_magic, par2_repair, external_processing, sfv_check
+from sabnzbd.newsunpack import unpack_magic, par2_repair, par2_remove, external_processing, sfv_check
 from threading import Thread
 from sabnzbd.misc import real_path, get_unique_path, create_dirs, move_to_path, \
                          get_unique_filename, make_script_path, \
@@ -548,7 +548,9 @@ def parring(nzo, workdir):
 
         logging.info('Par2 check finished on %s', filename)
 
-    if (par_error and not re_add) or not repair_sets:
+    if cfg.enable_par_cleanup() and not (re_add or par_error):
+        par2_remove(workdir)
+    elif (par_error and not re_add) or not repair_sets:
         # See if alternative SFV check is possible
         if cfg.sfv_check():
             sfvs = globber(workdir, '*.sfv')

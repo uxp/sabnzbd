@@ -802,64 +802,43 @@ def par2_repair(parfile_nzf, nzo, workdir, setname):
             logging.info("Traceback: ", exc_info = True)
             return readd, result
 
-    try:
-        if cfg.enable_par_cleanup():
-            new_dir_content = os.listdir(workdir)
-
-            for path in new_dir_content:
-                if os.path.splitext(path)[1] == '.1' and path not in old_dir_content:
-                    try:
-                        path = os.path.join(workdir, path)
-
-                        logging.info("Deleting %s", path)
-                        os.remove(path)
-                    except:
-                        logging.warning(Ta('Deleting %s failed!'), latin1(path))
-
-            path = os.path.join(workdir, setname + '.par2')
-            path2 = os.path.join(workdir, setname + '.PAR2')
-
-            if os.path.exists(path):
+    if result and cfg.enable_par_cleanup():
+        # Remove .1 files created by par2-repair
+        new_dir_content = os.listdir(workdir)
+        for path in new_dir_content:
+            if os.path.splitext(path)[1] == '.1' and path not in old_dir_content:
                 try:
+                    path = os.path.join(workdir, path)
                     logging.info("Deleting %s", path)
                     os.remove(path)
                 except:
-                    logging.warning(Ta('Deleting %s failed!'), latin1(path))
+                    logging.warning(Ta('Deleting %s failed!'), path)
 
-            if os.path.exists(path2):
+        # Clean up files used by par2 for joining
+        for filepath in used_joinables:
+            if filepath in joinables:
+                joinables.remove(filepath)
+            if os.path.exists(filepath):
+                logging.info("Deleting %s", filepath)
                 try:
-                    logging.info("Deleting %s", path2)
-                    os.remove(path2)
-                except:
-                    logging.warning(Ta('Deleting %s failed!'), latin1(path2))
-
-            if os.path.exists(parfile):
-                try:
-                    logging.info("Deleting %s", parfile)
-                    os.remove(parfile)
+                    os.remove(filepath)
                 except OSError:
-                    logging.warning(Ta('Deleting %s failed!'), latin1(parfile))
-
-            deletables = []
-            for f in pars:
-                if f in setpars:
-                    deletables.append(os.path.join(workdir, f))
-            deletables.extend(used_joinables)
-            for filepath in deletables:
-                if filepath in joinables:
-                    joinables.remove(filepath)
-                if os.path.exists(filepath):
-                    logging.info("Deleting %s", filepath)
-                    try:
-                        os.remove(filepath)
-                    except OSError:
-                        logging.warning(Ta('Deleting %s failed!'), latin1(filepath))
-    except:
-        msg = sys.exc_info()[1]
-        nzo.fail_msg = T('Repairing failed, %s') % msg
-        logging.error(Ta('Error "%s" while running par2_repair on set %s'), msg, latin1(setname))
+                    logging.warning(Ta('Deleting %s failed!'), latin1(filepath))
 
     return readd, result
+
+
+def par2_remove(workdir):
+    """ Remove all par2 files from 'workdir'
+    """
+    for path in os.listdir(workdir):
+        if os.path.splitext(path)[1].lower() == '.par2':
+            try:
+                path = os.path.join(workdir, path)
+                logging.info("Deleting %s", latin1(path))
+                os.remove(path)
+            except:
+                logging.warning(Ta('Deleting %s failed!'), latin1(path))
 
 
 def PAR_Verify(parfile, parfile_nzf, nzo, setname, joinables, classic=False):
@@ -887,9 +866,12 @@ def PAR_Verify(parfile, parfile_nzf, nzo, setname, joinables, classic=False):
         command = [str(PAR2C_COMMAND), cmd, parfile]
         classic = True
 
-    for joinable in joinables:
-        if setname in joinable:
-            command.append(joinable)
+    # Let par2 use all available files
+    command.append('*')
+
+    #for joinable in joinables:
+    #    if setname in joinable:
+    #        command.append(joinable)
 
     stup, need_shell, command, creationflags = build_command(command)
     logging.debug('Starting par2: %s', command)
