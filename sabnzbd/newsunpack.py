@@ -477,10 +477,17 @@ def rar_extract(rarfile, numrars, one_folder, nzo, setname, extraction_path):
         passwords.insert(0, '')
 
     for password in passwords:
-        if password: logging.debug('Trying unrar with password "%s"', password)
+        if password:
+            logging.debug('Trying unrar with password "%s"', password)
+            msg = T('Trying unrar with password "%s"') % unicoder(password)
+            nzo.fail_msg = msg
+            nzo.set_unpack_info('Unpack', msg)
         fail, new_files, rars = rar_extract_core(rarfile, numrars, one_folder, nzo, setname, extraction_path, password)
         if fail != 2:
             break
+
+    if fail == 2:
+        logging.error('%s (%s)', Ta('Unpacking failed, archive requires a password'), latin1(os.path.split(rarfile)[1]))
     return fail, new_files, rars
 
 
@@ -604,7 +611,6 @@ def rar_extract_core(rarfile, numrars, one_folder, nzo, setname, extraction_path
             nzo.fail_msg = T('Unpacking failed, archive requires a password')
             msg = ('[%s][%s] '+Ta('Unpacking failed, archive requires a password')) % (setname, latin1(filename))
             nzo.set_unpack_info('Unpack', unicoder(msg), set=setname)
-            logging.error('%s (%s)', Ta('Unpacking failed, archive requires a password'), latin1(filename))
             fail = 2
 
         else:
@@ -840,7 +846,7 @@ def par2_remove(workdir):
             except:
                 logging.warning(Ta('Deleting %s failed!'), latin1(path))
 
-
+_RE_BLOCK_FOUND = re.compile('File: "([^"]+)" - found \d+ of \d+ data blocks from "([^"]+)"')
 def PAR_Verify(parfile, parfile_nzf, nzo, setname, joinables, classic=False):
     """ Run par2 on par-set """
     if cfg.never_repair():
@@ -853,6 +859,7 @@ def PAR_Verify(parfile, parfile_nzf, nzo, setname, joinables, classic=False):
     nzo.status = 'Verifying'
     start = time()
 
+    workdir = os.path.split(parfile)[0]
     classic = classic or not cfg.par2_multicore()
     logging.debug('Par2-classic = %s', classic)
 
@@ -867,7 +874,7 @@ def PAR_Verify(parfile, parfile_nzf, nzo, setname, joinables, classic=False):
         classic = True
 
     # Let par2 use all available files
-    command.append('*')
+    command.append(os.path.join(os.path.split(parfile)[0],'*'))
 
     #for joinable in joinables:
     #    if setname in joinable:
@@ -1061,6 +1068,11 @@ def PAR_Verify(parfile, parfile_nzf, nzo, setname, joinables, classic=False):
                     if line.find(os.path.split(jn)[1]) > 0:
                         used_joinables.append(jn)
                         break
+                # Special case of joined RAR files, the "of" and "from" must both be RAR files
+                # This prevents the joined rars files from being seen as an extra rar-set
+                m = _RE_BLOCK_FOUND.search(line)
+                if m and '.rar' in m.group(1).lower() and '.rar' in m.group(2).lower():
+                    used_joinables.append(os.path.join(workdir, m.group(1)))
 
             elif 'Could not write' in line and 'at offset 0:' in line and not classic:
                 # Hit a bug in par2-tbb, retry with par2-classic
