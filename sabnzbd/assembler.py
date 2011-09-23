@@ -295,4 +295,3 @@ def check_encrypted_rar(nzo, filepath):
         except:
             logging.debug('RAR file %s cannot be inspected', filepath)
     return encrypted
-
