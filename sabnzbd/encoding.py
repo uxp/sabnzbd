@@ -122,6 +122,8 @@ def unicoder(p):
             except:
                 return p.decode('latin-1', 'replace')
         return p.decode('latin-1', 'replace')
+    elif isinstance(p, list):
+        return u', '.join((unicoder(x) for x in p))
     else:
         return unicode(str(p))
 
@@ -185,6 +187,8 @@ def titler(p):
     """ title() replacement
         Python's title() fails with Latin-1, so use Unicode detour.
     """
+    if isinstance(p, unicode):
+        return p.title()
     if gUTF:
         try:
             return p.decode('utf-8').title().encode('utf-8')

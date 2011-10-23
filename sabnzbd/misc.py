@@ -37,7 +37,7 @@ from sabnzbd.decorators import synchronized
 from sabnzbd.constants import DEFAULT_PRIORITY, FUTURE_Q_FOLDER, JOB_ADMIN, GIGI
 import sabnzbd.config as config
 import sabnzbd.cfg as cfg
-from sabnzbd.encoding import unicoder, latin1
+from sabnzbd.encoding import unicoder, latin1, platform_encode
 
 RE_VERSION = re.compile('(\d+)\.(\d+)\.(\d+)([a-zA-Z]*)(\d*)')
 RE_UNITS = re.compile('(\d+\.*\d*)\s*([KMGTP]{0,1})', re.I)
@@ -907,7 +907,7 @@ def on_cleanup_list(filename, skip_nzb=False):
     if lst:
         ext = os.path.splitext(filename)[1].strip().strip('.').lower()
         for k in lst:
-            item = k.strip().strip('.').lower()
+            item = unicoder(k).strip().strip('.').lower()
             if item == ext and not (skip_nzb and item == 'nzb'):
                 return True
     return False
@@ -1194,3 +1194,25 @@ def is_writable(path):
         return bool(os.stat(path).st_mode & stat.S_IWUSR)
     else:
         return True
+
+
+def short_path(path):
+    """ For Windows return shortended latin-1 path, for others proper platform encoding
+    """
+    if sabnzbd.WIN32:
+        import win32api
+        # Need to make sure the path actually exists, otherwise ignore
+        if os.path.exists(path):
+            path = win32api.GetShortPathName(path)
+        path = clip_path(path)
+    return platform_encode(path)
+
+def clip_path(path, latin=False):
+    """ Remove \\?\ prefix from Windows paths
+    """
+    if sabnzbd.WIN32 and path and '?' in path:
+        path = path.replace('\\\\?\\', '')
+        if latin:
+            path = latin1(path)
+    return path
+

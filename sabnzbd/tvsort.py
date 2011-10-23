@@ -211,11 +211,11 @@ class SeriesSorter(object):
             # Get the final path
             path = self.construct_path()
             self.final_path = os.path.join(self.original_path, path)
-            return self.final_path
+            path = self.final_path
         else:
             # Error Sorting
-            return os.path.join(self.original_path, self.original_dirname)
-
+            path = os.path.join(self.original_path, self.original_dirname)
+        return os.path.normpath(os.path.abspath(path))
 
     def get_multi_ep_naming(self, one, two, extras):
         ''' Returns a list of unique values joined into a string and seperated by - (ex:01-02-03-04) '''
@@ -376,6 +376,8 @@ class SeriesSorter(object):
         largest = (None, None, 0)
 
         def to_filepath(f, current_path):
+            if isinstance(current_path, unicode):
+                f = unicoder(f)
             if is_full_path(f):
                 filepath = f.replace('_UNPACK_', '')
             else:
@@ -530,10 +532,12 @@ class GenericSorter(object):
             # Get the final path
             path = self.construct_path()
             self.final_path = os.path.join(self.original_path, path)
-            return self.final_path
+            path = self.final_path
         else:
             # Error Sorting
-            return os.path.join(self.original_path, self.original_dirname)
+            path = os.path.join(self.original_path, self.original_dirname)
+        return os.path.normpath(os.path.abspath(path))
+
 
     def get_values(self):
         """ Collect and construct all the values needed for path replacement """
@@ -724,10 +728,11 @@ class DateSorter(object):
             # Get the final path
             path = self.construct_path()
             self.final_path = os.path.join(self.original_path, path)
-            return self.final_path
+            path = self.final_path
         else:
             # Error Sorting
-            return os.path.join(self.original_path, self.original_dirname)
+            path = os.path.join(self.original_path, self.original_dirname)
+        return os.path.normpath(os.path.abspath(spath))
 
     def get_values(self):
         """ Collect and construct all the values needed for path replacement """

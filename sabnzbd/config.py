@@ -23,6 +23,7 @@ import os
 import logging
 import threading
 import sabnzbd.misc
+from sabnzbd.encoding import unicoder
 from sabnzbd.constants import CONFIG_VERSION, NORMAL_PRIORITY, DEFAULT_PRIORITY
 from sabnzbd.utils import listquote
 from sabnzbd.utils import configobj
@@ -184,6 +185,13 @@ class OptionDir(Option):
             if self.__create and not os.path.exists(path):
                 res, path = sabnzbd.misc.create_real_path(self.ident()[1], self.__root, value, self.__apply_umask)
         return path
+
+    def get_upath(self):
+        """ Return full absolute path in Unicode and for Windows in "long" format """
+        if sabnzbd.WIN32:
+            return u'\\\\?\\' + unicoder(self.get_path())
+        else:
+            return unicoder(self.get_path())
 
     def set_root(self, root):
         """ Set new root, is assumed to be valid """

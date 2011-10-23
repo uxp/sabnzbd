@@ -32,11 +32,12 @@ from sabnzbd.newsunpack import unpack_magic, par2_repair, external_processing, s
 from threading import Thread
 from sabnzbd.misc import real_path, get_unique_path, create_dirs, move_to_path, \
                          get_unique_filename, make_script_path, \
-                         on_cleanup_list, renamer, remove_dir, remove_all, globber
+                         on_cleanup_list, renamer, remove_dir, remove_all, globber, \
+                         short_path, clip_path
 from sabnzbd.tvsort import Sorter
 from sabnzbd.constants import REPAIR_PRIORITY, POSTPROC_QUEUE_FILE_NAME, \
      POSTPROC_QUEUE_VERSION, sample_match, JOB_ADMIN
-from sabnzbd.encoding import TRANS, unicoder
+from sabnzbd.encoding import TRANS, unicoder, platform_encode
 from sabnzbd.newzbin import Bookmarks
 import sabnzbd.emailer as emailer
 import sabnzbd.dirscanner as dirscanner
@@ -123,7 +124,8 @@ class PostProcessor(Thread):
             self.history_queue.remove(nzo)
         except:
             nzo_id = getattr(nzo, 'nzo_id', 'unknown id')
-            logging.error(Ta('Failed to remove nzo from postproc queue (id)'), nzo_id)
+            logging.error(Ta('Failed to remove nzo from postproc queue (id)') + ' ' + nzo_id)
+            logging.info("Traceback: ", exc_info = True)
         self.save()
 
     def stop(self):
@@ -207,7 +209,7 @@ def process_job(nzo):
     unpack_error = False
     nzb_list = []
     # These need to be initialised incase of a crash
-    workdir_complete = ''
+    workdir_complete = u''
     postproc_time = 0
     script_log = ''
     script_line = ''
@@ -221,7 +223,7 @@ def process_job(nzo):
     if flag_unpack: flag_repair = True
 
     # Get the NZB name
-    filename = nzo.final_name
+    filename = unicoder(nzo.final_name)
     msgid = nzo.msgid
 
     if nzo.precheck:
@@ -283,21 +285,22 @@ def process_job(nzo):
             all_ok = all_ok and not par_error
 
         # Set complete dir to workdir in case we need to abort
+        workdir = unicoder(workdir)
         workdir_complete = workdir
-        dirname = nzo.final_name
+        dirname = unicoder(nzo.final_name)
 
         if all_ok:
             one_folder = False
             ## Determine class directory
             if cfg.create_group_folders():
-                complete_dir = addPrefixes(cfg.complete_dir.get_path(), nzo.dirprefix)
+                complete_dir = addPrefixes(cfg.complete_dir.get_upath(), unicoder(nzo.dirprefix))
                 complete_dir = create_dirs(complete_dir)
             else:
                 catdir = config.get_categories(cat).dir()
                 if catdir.endswith('*'):
-                    catdir = catdir.strip('*')
+                    catdir = unicoder(catdir.strip('*'))
                     one_folder = True
-                complete_dir = real_path(cfg.complete_dir.get_path(), catdir)
+                complete_dir = real_path(cfg.complete_dir.get_upath(), catdir)
 
             ## TV/Movie/Date Renaming code part 1 - detect and construct paths
             file_sorter = Sorter(cat)
@@ -312,11 +315,11 @@ def process_job(nzo):
             else:
                 workdir_complete = get_unique_path(os.path.join(complete_dir, dirname), create_dir=True)
             if not workdir_complete or not os.path.exists(workdir_complete):
-                crash_msg = T('Cannot create final folder %s') % unicoder(os.path.join(complete_dir, dirname))
+                crash_msg = T('Cannot create final folder %s') % os.path.join(complete_dir, dirname)
                 raise IOError
 
             if cfg.folder_rename() and not one_folder:
-                tmp_workdir_complete = prefix(workdir_complete, '_UNPACK_')
+                tmp_workdir_complete = prefix(workdir_complete, u'_UNPACK_')
                 try:
                     renamer(workdir_complete, tmp_workdir_complete)
                 except:
@@ -331,7 +334,10 @@ def process_job(nzo):
                     #set the current nzo status to "Extracting...". Used in History
                     nzo.status = 'Extracting'
                     logging.info("Running unpack_magic on %s", filename)
-                    unpack_error, newfiles = unpack_magic(nzo, workdir, tmp_workdir_complete, flag_delete, one_folder, (), (), (), ())
+                    curdir = os.getcwd()
+                    os.chdir(short_path(tmp_workdir_complete))
+                    unpack_error, newfiles = unpack_magic(nzo, short_path(workdir), short_path(tmp_workdir_complete), flag_delete, one_folder, (), (), (), ())
+                    os.chdir(curdir)
                     logging.info("unpack_magic finished on %s", filename)
                 else:
                     nzo.set_unpack_info('Unpack', T('No post-processing because of failed verification'))
@@ -362,7 +368,7 @@ def process_job(nzo):
                 ## Check if this is an NZB-only download, if so redirect to queue
                 ## except when PP was Download-only
                 if flag_repair:
-                    nzb_list = nzb_redirect(tmp_workdir_complete, nzo.final_name, nzo.pp, script, cat, priority=nzo.priority)
+                    nzb_list = nzb_redirect(platform_encode(tmp_workdir_complete), nzo.final_name, nzo.pp, script, cat, priority=nzo.priority)
                 else:
                     nzb_list = None
                 if nzb_list:
@@ -380,12 +386,12 @@ def process_job(nzo):
             ## Give destination its final name
             if cfg.folder_rename() and tmp_workdir_complete and not one_folder:
                 if not all_ok:
-                    workdir_complete = tmp_workdir_complete.replace('_UNPACK_', '_FAILED_')
+                    workdir_complete = tmp_workdir_complete.replace(u'_UNPACK_', u'_FAILED_')
                     workdir_complete = get_unique_path(workdir_complete, n=0, create_dir=False)
                 try:
                     collapse_folder(tmp_workdir_complete, workdir_complete)
                 except:
-                    logging.error(Ta('Error renaming "%s" to "%s"'), tmp_workdir_complete, workdir_complete)
+                    logging.error(T('Error renaming "%s" to "%s"'), tmp_workdir_complete, workdir_complete)
                     logging.info("Traceback: ", exc_info = True)
 
             job_result = int(par_error) + int(unpack_error)*2
@@ -461,7 +467,7 @@ def process_job(nzo):
             nzo.status = 'Failed'
 
     except:
-        logging.error(Ta('Post Processing Failed for %s (%s)'), filename, crash_msg)
+        logging.error(T('Post Processing Failed for %s (%s)'), filename, crash_msg)
         if not crash_msg:
             logging.info("Traceback: ", exc_info = True)
             crash_msg = T('see logfile')
@@ -484,7 +490,7 @@ def process_job(nzo):
     history_db = database.get_history_handle()
     # Add the nzo to the database. Only the path, script and time taken is passed
     # Other information is obtained from the nzo
-    history_db.add_history_db(nzo, workdir_complete, nzo.downpath, postproc_time, script_log, script_line)
+    history_db.add_history_db(nzo, clip_path(workdir_complete), nzo.downpath, postproc_time, script_log, script_line)
     # The connection is only used once, so close it here
     history_db.close()
 
@@ -503,7 +509,7 @@ def process_job(nzo):
                 logging.debug('Removing workdir %s', workdir)
                 remove_all(workdir, recursive=True)
         except:
-            logging.error(Ta('Error removing workdir (%s)'), workdir)
+            logging.error(T('Error removing workdir (%s)'), workdir)
             logging.info("Traceback: ", exc_info = True)
 
     return True
@@ -648,7 +654,7 @@ def cleanup_list(wdir, skip_nzb):
                         logging.info("Removing unwanted file %s", path)
                         os.remove(path)
                     except:
-                        logging.error(Ta('Removing %s failed'), path)
+                        logging.error(T('Removing %s failed'), path)
                         logging.info("Traceback: ", exc_info = True)
 
 
@@ -714,7 +720,7 @@ def get_last_line(txt):
 
 def remove_samples(path):
     """ Remove all files that match the sample pattern """
-    RE_SAMPLE = re.compile(sample_match, re.I)
+    RE_SAMPLE = re.compile(unicoder(sample_match), re.I)
     for root, dirs, files in os.walk(path):
         for file_ in files:
             if RE_SAMPLE.search(file_):
@@ -723,7 +729,7 @@ def remove_samples(path):
                     logging.info("Removing unwanted sample file %s", path)
                     os.remove(path)
                 except:
-                    logging.error(Ta('Removing %s failed'), path)
+                    logging.error(T('Removing %s failed'), path)
                     logging.info("Traceback: ", exc_info = True)
 
 
