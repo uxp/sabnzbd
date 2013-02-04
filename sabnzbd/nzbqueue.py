@@ -23,6 +23,7 @@ import os
 import logging
 import time
 import datetime
+from urllib import unquote;
 
 import sabnzbd
 from sabnzbd.trylist import TryList
@@ -853,7 +854,7 @@ class NzbQueue(TryList):
             if nzo.futuretype:
                 url = nzo.url
                 if nzo.futuretype and url.lower().startswith('http'):
-                    lst.append((url, nzo))
+                    lst.append((unquote(url), nzo))
         return lst
 
     def get_msgids(self):
